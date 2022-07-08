@@ -12,6 +12,7 @@
 #include "lj_frame.h"
 #endif
 
+#include "bp.h"
 
 
 #define _CONCAT(a, b) a##b
@@ -30,29 +31,7 @@
 #define LJD_RUNNING  "ljd.running"  // running debugger ref
 
 
-
 typedef int LuaRef;
-
-/// breakpoint
-typedef struct {
-  int32_t id;
-  int32_t line;
-  char *file;
-} bp_t;
-
-/// breakpoints list
-typedef struct {
-  bp_t *data;
-  uint32_t len;
-  int32_t id;
-} bps_t;
-
-/// init breakpoints list
-#define BPS_INIT (bps_t){ \
-  .data = NULL, \
-  .len = 0, \
-  .id = 0, \
-}
 
 
 /// locals list
@@ -107,8 +86,8 @@ static bool locals_push(locals_t *locals, const char *name)
 
 /// debugger object
 typedef struct {
-  LuaRef coro; /// coroutine
-  LuaRef func; /// function
+  LuaRef coro; /// debugged coroutine
+  LuaRef func; /// debugged function
 
   int32_t currentbp; /// current breakpoint id
   int currentline; /// current line number
@@ -486,28 +465,12 @@ static int ljd_bp_add(lua_State *L)
   ljd_t *ljd = luaL_checkudata(L, 1, LJD_DEBUGGER);
   const char *file = luaL_checkstring(L, 2);
   int line = luaL_checkint(L, 3);
-  if (file == NULL || *file == '\0')
-    return luaL_error(L, "invalid file name");
-  if (line < 1)
-    return luaL_error(L, "invalid line");
 
-  size_t slen = strlen(file);
-  char *sfile = malloc(slen + 1);
-  if (sfile == NULL)
-    return luaL_error(L, "malloc");
-  memcpy(sfile, file, slen + 1);
+  const char *err;
+  uint32_t id = bp_add(&ljd->bps, file, line, &err);
+  if (id == 0)
+    return luaL_error(L, err);
 
-  size_t nlen = ljd->bps.len + 1;
-  bp_t *nbps = realloc(ljd->bps.data, nlen * sizeof(bp_t));
-  if (nbps == NULL) {
-    free(sfile);
-    return luaL_error(L, "realloc");
-  }
-
-  uint32_t id = ++ljd->bps.id;
-  nbps[nlen - 1] = (bp_t){ .id = id, .line = line, .file = sfile };
-  ljd->bps.data = nbps;
-  ljd->bps.len = nlen;
   lua_pushinteger(L, id);
   return 1;
 }

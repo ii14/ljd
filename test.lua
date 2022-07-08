@@ -47,13 +47,6 @@ local function state()
   print((':: %-16s %s:%d'):format(d.status, info.source, d.currentline))
 
   get_locals()
-
-  -- local lines = {}
-  -- for line in pairs(ljd.getlines(info.func)) do
-  --   lines[#lines+1] = line
-  -- end
-  -- table.sort(lines)
-  -- print(("lines: %d => %d: %s"):format(info.linedefined, info.lastlinedefined, table.concat(lines, ', ')))
   print()
 end
 

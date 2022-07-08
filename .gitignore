@@ -1,2 +1,4 @@
-ljd.so
+*.so
+*.o
+*.d
 compile_commands.json

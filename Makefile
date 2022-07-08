@@ -1,6 +1,3 @@
-ifndef LUA
-LUA = luajit
-endif
 ifndef MODNAME
 MODNAME = ljd
 endif
@@ -8,13 +5,21 @@ ifndef TARGET
 TARGET = ljd.so
 endif
 
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -g
+
+SRCS = ljd.c bp.c
+OBJS = $(SRCS:.c=.o)
+DEPS = $(OBJS:.o=.d)
+
 all: $(TARGET)
 
-$(TARGET): ljd.c
-	$(CC) -DMODNAME="$(MODNAME)" $(CFLAGS) -Iluajit/src -fPIC -shared -o $@ $< $(LDFLAGS)
+%.o: %.c
+	$(CC) -DMODNAME="$(MODNAME)" $(CFLAGS) -Iluajit/src -c -MMD -o $@ $<
 
-compile_commands.json: Makefile
-	compiledb -n make
+$(TARGET): $(OBJS)
+	$(CC) -DMODNAME="$(MODNAME)" $(CFLAGS) -Iluajit/src -fPIC -shared -o $@ $(OBJS) $(LDFLAGS)
+
+-include $(DEPS)
 
 luajit: luajit/src/luajit
 	cd luajit && make
@@ -22,7 +27,10 @@ luajit: luajit/src/luajit
 test: $(TARGET) luajit/src/luajit
 	./luajit/src/luajit test.lua
 
+compile_commands.json: Makefile
+	compiledb -n make
+
 clean:
-	rm -f $(TARGET)
+	@rm -rvf $(TARGET) $(OBJS) $(DEPS)
 
 .PHONY: all luajit test clean
