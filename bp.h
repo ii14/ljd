@@ -23,6 +23,7 @@ typedef struct {
   .id = 0, \
 }
 
-uint32_t bp_add(bps_t *bps, const char *file, int line, const char **err);
+uint32_t bps_add(bps_t *bps, const char *file, int line, const char **err);
+void bps_free(bps_t *bps);
 
 // vim: sw=2 sts=2 et

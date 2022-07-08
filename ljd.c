@@ -467,7 +467,7 @@ static int ljd_bp_add(lua_State *L)
   int line = luaL_checkint(L, 3);
 
   const char *err;
-  uint32_t id = bp_add(&ljd->bps, file, line, &err);
+  uint32_t id = bps_add(&ljd->bps, file, line, &err);
   if (id == 0)
     return luaL_error(L, err);
 
@@ -512,12 +512,7 @@ static int ljd_gc(lua_State *L)
   ljd->currentsrc = NULL;
 
   locals_free(&ljd->locals);
-  if (ljd->bps.data != NULL) {
-    for (size_t i = 0; i < ljd->bps.len; ++i)
-      free(ljd->bps.data[i].file);
-    free(ljd->bps.data);
-    ljd->bps.data = NULL;
-  }
+  bps_free(&ljd->bps);
 
   return 0;
 }
