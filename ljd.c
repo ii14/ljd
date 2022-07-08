@@ -30,52 +30,6 @@
 #define LJD_RUNNING  "ljd.running"  // running debugger ref
 
 
-const char *luaL_tolstring(lua_State *L, int idx, size_t *len) {
-  if (luaL_callmeta(L, idx, "__tostring")) {  /* metafield? */
-    if (!lua_isstring(L, -1))
-      return NULL;
-  }
-  else {
-    switch (lua_type(L, idx)) {
-      case LUA_TNUMBER:
-        lua_pushfstring(L, "%f", lua_tonumber(L, idx));
-        break;
-      case LUA_TSTRING:
-        lua_pushvalue(L, idx);
-        break;
-      case LUA_TBOOLEAN:
-        lua_pushstring(L, (lua_toboolean(L, idx) ? "true" : "false"));
-        break;
-      case LUA_TNIL:
-        lua_pushliteral(L, "nil");
-        break;
-      default: {
-        int tt = luaL_getmetafield(L, idx, "__name");  /* try name */
-        const char *kind = (tt == LUA_TSTRING) ? lua_tostring(L, -1) : luaL_typename(L, idx);
-        lua_pushfstring(L, "%s: %p", kind, lua_topointer(L, idx));
-        if (tt != LUA_TNIL)
-          lua_remove(L, -2);  /* remove '__name' */
-        break;
-      }
-    }
-  }
-  return lua_tolstring(L, -1, len);
-}
-
-static void print_locals(lua_State *L, int n)
-{
-  lua_Debug ar;
-  lua_getstack(L, n, &ar);
-  for (int i = 1;; ++i) {
-    const char *name = lua_getlocal(L, &ar, i);
-    if (name == NULL)
-      break;
-    const char *value = luaL_tolstring(L, -1, NULL);
-    printf("%d %s = (%s) %s\n", i, name, lua_typename(L, lua_type(L, -2)), value);
-    lua_pop(L, 2);
-  }
-}
-
 
 typedef int LuaRef;
 
@@ -148,19 +102,6 @@ static bool locals_push(locals_t *locals, const char *name)
   locals->len += len;
   locals->data[locals->len++] = '\0';
   return true;
-}
-
-static void locals_totable(locals_t *locals, lua_State *L)
-{
-  lua_newtable(L);
-  if (locals == NULL || locals->data == NULL)
-    return;
-  for (size_t i = 1, pos = 0; pos < locals->len; ++i) {
-    const size_t len = strlen(locals->data + pos);
-    lua_pushlstring(L, locals->data + pos, len);
-    lua_rawseti(L, -2, i);
-    pos += len + 1;
-  }
 }
 
 
@@ -240,12 +181,6 @@ static bool canresume(lua_State *L)
   return coro_status(L) != CORO_DEAD;
 }
 
-
-static int nop(lua_State *L)
-{
-  (void)L;
-  return 0;
-}
 
 static void hook(lua_State *L, lua_Debug *ar)
 {
