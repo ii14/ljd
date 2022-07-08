@@ -1,0 +1,6 @@
+[submodule "luajit"]
+	path = luajit
+	url = https://github.com/LuaJIT/LuaJIT
+[submodule "inspect.lua"]
+	path = inspect
+	url = git@github.com:kikito/inspect.lua.git
