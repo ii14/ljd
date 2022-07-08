@@ -726,13 +726,6 @@ static int ljd_tostring(lua_State *L)
   return 1;
 }
 
-static int ljd_getlines(lua_State *L)
-{
-  luaL_checktype(L, 1, LUA_TFUNCTION);
-  lua_Debug ar;
-  return lua_getinfo(L, ">L", &ar) == 0 ? 0 : 1;
-}
-
 
 
 int CONCAT(luaopen_, MODNAME)(lua_State *L)
@@ -751,8 +744,6 @@ int CONCAT(luaopen_, MODNAME)(lua_State *L)
   lua_setfield(L, -2, "new");
   lua_pushcfunction(L, ljd_bp);
   lua_setfield(L, -2, "breakpoint");
-  lua_pushcfunction(L, ljd_getlines);
-  lua_setfield(L, -2, "getlines");
   return 1;
 }
 
