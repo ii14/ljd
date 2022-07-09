@@ -101,22 +101,32 @@ describe('ljd', function()
       local D = ljd.new(f)
 
       eq(-1, D.currentline)
-      eq({ 0 }, { D:step() })
+      eq({ 0 }, { D:next() })
       eq(L(f) + 1, D.currentline)
-      eq({ 0 }, { D:step() })
+      eq({ 0 }, { D:next() })
       eq(L(f) + 2, D.currentline)
-      eq({ 0 }, { D:step() })
-      eq(L(f2) + 1, D.currentline)
-      eq({ 0 }, { D:step() })
-      eq(L(f2) + 2, D.currentline)
-      eq({ 0 }, { D:step() })
+      eq({ 0 }, { D:next() })
       eq(L(f) + 3, D.currentline)
-      eq({ true, 1, 2 }, { D:step() })
+      eq({ true, 1, 2 }, { D:next() })
       eq(-1, D.currentline)
     end)
   end)
 
   describe('finish()', function()
+    it('can run function from start to end', function()
+      local function f()
+        local a = 1
+        local b = 2
+        return a, b
+      end
+
+      local D = ljd.new(f)
+
+      eq(-1, D.currentline)
+      eq({ true, 1, 2 }, { D:finish() })
+      eq(-1, D.currentline)
+    end)
+
     it('can resume execution', function()
       local function f()
         local a = 1
@@ -162,6 +172,20 @@ describe('ljd', function()
   end)
 
   describe('continue()', function()
+    it('can run function from start to end', function()
+      local function f()
+        local a = 1
+        local b = 2
+        return a, b
+      end
+
+      local D = ljd.new(f)
+
+      eq(-1, D.currentline)
+      eq({ true, 1, 2 }, { D:continue() })
+      eq(-1, D.currentline)
+    end)
+
     it('can resume execution', function()
       local function f()
         local a = 1

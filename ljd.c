@@ -90,13 +90,14 @@ static bool locals_push(locals_t *locals, const char *name)
 typedef struct {
   LuaRef coro; /// debugged coroutine
   LuaRef func; /// debugged function
+  int nargs; /// number of arguments to the function. -1 after function was started
 
   int32_t currentbp; /// current breakpoint id
   int currentline; /// current line number
   char *currentsrc; /// current source
 
-  int skipline; /// skip line
-  int skiplevel; /// skip instructions above this call stack level
+  int skipline; /// skip line. -1 is disabled
+  int skiplevel; /// skip instructions above this call stack level. -1 is disabled
   bool continuing; /// is continue
 
   locals_t locals; /// local variables
@@ -107,6 +108,7 @@ typedef struct {
 #define LJD_INIT (ljd_t){ \
   .coro = LUA_REFNIL, \
   .func = LUA_REFNIL, \
+  .nargs = 0, \
   .currentbp = 0, \
   .currentline = -1, \
   .currentsrc = NULL, \
@@ -340,7 +342,7 @@ static inline int action_return(
   return n + 1;
 }
 
-/// ljd.step
+/// ljd.step: step into the function
 static int ljd_step(lua_State *L)
 {
   ljd_t *ljd;
@@ -348,15 +350,23 @@ static int ljd_step(lua_State *L)
   if (!action_enter(L, &ljd, &coro))
     return 0;
 
+  int nargs = ljd->nargs;
   int n = lua_gettop(coro);
+  if (nargs < 0) {
+    nargs = 0;
+  } else {
+    ljd->nargs = -1;
+    --n;
+  }
+
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
-  int status = lua_resume(coro, 0);
+  int status = lua_resume(coro, nargs);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
   n = lua_gettop(coro) - n;
   return action_return(L, ljd, coro, status, n);
 }
 
-/// ljd.next
+/// ljd.next: step over the function
 static int ljd_next(lua_State *L)
 {
   ljd_t *ljd;
@@ -368,15 +378,23 @@ static int ljd_next(lua_State *L)
   if (ljd->skiplevel == 0) // next is not allowed to skip entire coroutine
     ljd->skiplevel = 1;
 
+  int nargs = ljd->nargs;
   int n = lua_gettop(coro);
+  if (nargs < 0) {
+    nargs = 0;
+  } else {
+    ljd->nargs = -1;
+    --n;
+  }
+
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
-  int status = lua_resume(coro, 0);
+  int status = lua_resume(coro, nargs);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
   n = lua_gettop(coro) - n;
   return action_return(L, ljd, coro, status, n);
 }
 
-/// ljd.finish
+/// ljd.finish: step out of the function
 static int ljd_finish(lua_State *L)
 {
   ljd_t *ljd;
@@ -388,15 +406,23 @@ static int ljd_finish(lua_State *L)
   if (ljd->skiplevel < 0)
     ljd->skiplevel = 0;
 
+  int nargs = ljd->nargs;
   int n = lua_gettop(coro);
+  if (nargs < 0) {
+    nargs = 0;
+  } else {
+    ljd->nargs = -1;
+    --n;
+  }
+
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
-  int status = lua_resume(coro, 0);
+  int status = lua_resume(coro, nargs);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
   n = lua_gettop(coro) - n;
   return action_return(L, ljd, coro, status, n);
 }
 
-/// ljd.continue
+/// ljd.continue: resume execution
 static int ljd_continue(lua_State *L)
 {
   ljd_t *ljd;
@@ -407,13 +433,21 @@ static int ljd_continue(lua_State *L)
   ljd->continuing = true;
 
   int status;
+  int nargs = ljd->nargs;
   int n = lua_gettop(coro);
+  if (nargs < 0) {
+    nargs = 0;
+  } else {
+    ljd->nargs = -1;
+    --n;
+  }
+
   if (ljd->bps.len > 0) { // set hook if there are any breakpoints set
     lua_sethook(coro, hook, LUA_MASKLINE, 0);
-    status = lua_resume(coro, 0);
+    status = lua_resume(coro, nargs);
     lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
   } else {
-    status = lua_resume(coro, 0);
+    status = lua_resume(coro, nargs);
   }
   n = lua_gettop(coro) - n;
   return action_return(L, ljd, coro, status, n);
@@ -483,10 +517,11 @@ static int ljd_bp_add(lua_State *L)
 static int ljd_new(lua_State *L)
 {
   luaL_checktype(L, 1, LUA_TFUNCTION);
+  const int nargs = lua_gettop(L) - 1;
 
   lua_State *coro = lua_newthread(L);
   lua_pushvalue(L, 1);
-  lua_xmove(L, coro, 1); // copy function to the new thread
+  lua_xmove(L, coro, 1 + nargs); // copy function and arguments to the new thread
 
   ljd_t *data = lua_newuserdata(L, sizeof(ljd_t));
   *data = LJD_INIT;
@@ -494,6 +529,7 @@ static int ljd_new(lua_State *L)
   data->func = luaL_ref(L, LUA_REGISTRYINDEX);
   lua_pushvalue(L, -2); // save thread ref
   data->coro = luaL_ref(L, LUA_REGISTRYINDEX);
+  data->nargs = nargs;
 
   luaL_getmetatable(L, LJD_DEBUGGER);
   lua_setmetatable(L, -2);
