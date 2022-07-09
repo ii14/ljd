@@ -327,11 +327,13 @@ static inline int action_return(
   lua_pushnil(L);
   lua_setfield(L, LUA_REGISTRYINDEX, LJD_RUNNING);
 
-  if (status == LUA_OK) {
-    lua_pushboolean(L, true);
-  } else if (status == LUA_YIELD) {
+  if (status == LUA_YIELD) {
     lua_pushnumber(L, ljd->currentbp);
+  } else if (status == LUA_OK) {
+    ljd->currentline = -1;
+    lua_pushboolean(L, true);
   } else {
+    ljd->currentline = -1;
     lua_pushboolean(L, false);
   }
   lua_xmove(coro, L, n); // move returned values
