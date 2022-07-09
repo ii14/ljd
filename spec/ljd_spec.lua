@@ -202,4 +202,15 @@ describe('ljd', function()
       eq(-1, D.currentline)
     end)
   end)
+
+  it('can pass arguments to the function', function()
+    local function f(a, b)
+      a = a * 2
+      b = b * 2
+      return a, b
+    end
+
+    local D = ljd.new(f, 1, 2)
+    eq({ true, 2, 4 }, { D:continue() })
+  end)
 end)

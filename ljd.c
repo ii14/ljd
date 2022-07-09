@@ -284,6 +284,7 @@ static inline bool action_enter(
 {
   *ljd = luaL_checkudata(L, 1, LJD_DEBUGGER);
   lua_rawgeti(L, LUA_REGISTRYINDEX, (*ljd)->coro);
+  luaL_checktype(L, 2, LUA_TTHREAD);
   *coro = lua_tothread(L, 2);
 
   if (L == *coro) {
@@ -355,8 +356,8 @@ static int ljd_step(lua_State *L)
   if (nargs < 0) {
     nargs = 0;
   } else {
+    n -= nargs + 1;
     ljd->nargs = -1;
-    --n;
   }
 
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
@@ -383,8 +384,8 @@ static int ljd_next(lua_State *L)
   if (nargs < 0) {
     nargs = 0;
   } else {
+    n -= nargs + 1;
     ljd->nargs = -1;
-    --n;
   }
 
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
@@ -411,8 +412,8 @@ static int ljd_finish(lua_State *L)
   if (nargs < 0) {
     nargs = 0;
   } else {
+    n -= nargs + 1;
     ljd->nargs = -1;
-    --n;
   }
 
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
@@ -438,8 +439,8 @@ static int ljd_continue(lua_State *L)
   if (nargs < 0) {
     nargs = 0;
   } else {
+    n -= nargs + 1;
     ljd->nargs = -1;
-    --n;
   }
 
   if (ljd->bps.len > 0) { // set hook if there are any breakpoints set
@@ -516,18 +517,25 @@ static int ljd_bp_add(lua_State *L)
 /// ljd.new: create a new debugger
 static int ljd_new(lua_State *L)
 {
+  // [ func args... ]
   luaL_checktype(L, 1, LUA_TFUNCTION);
   const int nargs = lua_gettop(L) - 1;
 
-  lua_State *coro = lua_newthread(L);
+  // push function and thread at the bottom of the stack
   lua_pushvalue(L, 1);
-  lua_xmove(L, coro, 1 + nargs); // copy function and arguments to the new thread
+  lua_insert(L, 1);
+  lua_State *coro = lua_newthread(L);
+  lua_insert(L, 2);
+  // [ func coro func args... ]
+
+  lua_xmove(L, coro, 1 + nargs); // move function and arguments to the new thread
+  // [ func coro ]
 
   ljd_t *data = lua_newuserdata(L, sizeof(ljd_t));
   *data = LJD_INIT;
   lua_pushvalue(L, 1); // save function ref
   data->func = luaL_ref(L, LUA_REGISTRYINDEX);
-  lua_pushvalue(L, -2); // save thread ref
+  lua_pushvalue(L, 2); // save thread ref
   data->coro = luaL_ref(L, LUA_REGISTRYINDEX);
   data->nargs = nargs;
 
