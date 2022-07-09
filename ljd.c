@@ -365,8 +365,8 @@ static int ljd_next(lua_State *L)
     return 0;
 
   ljd->skiplevel = getlevel(coro);
-  // if (ljd->skiplevel == 0)
-  //   ljd->skiplevel = 1;
+  if (ljd->skiplevel == 0) // next is not allowed to skip entire coroutine
+    ljd->skiplevel = 1;
 
   int n = lua_gettop(coro);
   lua_sethook(coro, hook, LUA_MASKLINE, 0);

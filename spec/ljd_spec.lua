@@ -41,7 +41,7 @@ describe('ljd', function()
       local D, L = ljd.new(f), getline(f)
 
       eq(-1, D.currentline)
-      eq({ 0 }, { D:step() })
+      eq({ 0 }, { D:next() })
       eq(L + 1, D.currentline)
       eq({ 0 }, { D:next() })
       eq(L + 2, D.currentline)
