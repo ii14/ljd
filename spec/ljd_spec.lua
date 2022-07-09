@@ -2,9 +2,15 @@ local ljd = require('ljd')
 
 local eq = assert.is_same
 
-local function getline(f)
-  local info = assert(debug.getinfo(f, 'S'), 'debug.getinfo')
-  return assert(info.linedefined, 'debug.getinfo linedefined')
+local cache = {}
+local function L(f)
+  local line = cache[f]
+  if not line then
+    local info = assert(debug.getinfo(f, 'S'), 'debug.getinfo')
+    line = assert(info.linedefined, 'debug.getinfo linedefined')
+    cache[f] = line
+  end
+  return line
 end
 
 describe('ljd', function()
@@ -16,15 +22,15 @@ describe('ljd', function()
         return a, b
       end
 
-      local D, L = ljd.new(f), getline(f)
+      local D = ljd.new(f)
 
       eq(-1, D.currentline)
       eq({ 0 }, { D:step() })
-      eq(L + 1, D.currentline)
+      eq(L(f) + 1, D.currentline)
       eq({ 0 }, { D:step() })
-      eq(L + 2, D.currentline)
+      eq(L(f) + 2, D.currentline)
       eq({ 0 }, { D:step() })
-      eq(L + 3, D.currentline)
+      eq(L(f) + 3, D.currentline)
       eq({ true, 1, 2 }, { D:step() })
       eq(-1, D.currentline)
     end)
@@ -38,15 +44,15 @@ describe('ljd', function()
         return a, b
       end
 
-      local D, L = ljd.new(f), getline(f)
+      local D = ljd.new(f)
 
       eq(-1, D.currentline)
       eq({ 0 }, { D:next() })
-      eq(L + 1, D.currentline)
+      eq(L(f) + 1, D.currentline)
       eq({ 0 }, { D:next() })
-      eq(L + 2, D.currentline)
+      eq(L(f) + 2, D.currentline)
       eq({ 0 }, { D:next() })
-      eq(L + 3, D.currentline)
+      eq(L(f) + 3, D.currentline)
       eq({ true, 1, 2 }, { D:next() })
       eq(-1, D.currentline)
     end)
@@ -60,11 +66,11 @@ describe('ljd', function()
         return a, b
       end
 
-      local D, L = ljd.new(f), getline(f)
+      local D = ljd.new(f)
 
       eq(-1, D.currentline)
       eq({ 0 }, { D:step() })
-      eq(L + 1, D.currentline)
+      eq(L(f) + 1, D.currentline)
       eq({ true, 1, 2 }, { D:finish() })
       eq(-1, D.currentline)
     end)
@@ -78,11 +84,11 @@ describe('ljd', function()
         return a, b
       end
 
-      local D, L = ljd.new(f), getline(f)
+      local D = ljd.new(f)
 
       eq(-1, D.currentline)
       eq({ 0 }, { D:step() })
-      eq(L + 1, D.currentline)
+      eq(L(f) + 1, D.currentline)
       eq({ true, 1, 2 }, { D:continue() })
       eq(-1, D.currentline)
     end)
