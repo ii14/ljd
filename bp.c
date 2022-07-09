@@ -3,6 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+void bps_free(bps_t *bps)
+{
+  if (bps == NULL)
+    return;
+  if (bps->data != NULL) {
+    for (size_t i = 0; i < bps->len; ++i)
+      free(bps->data[i].file);
+    free(bps->data);
+  }
+  *bps = BPS_INIT;
+}
+
 uint32_t bps_add(bps_t *bps, const char *file, int line, const char **err)
 {
 #define E(msg) \
@@ -35,18 +47,6 @@ uint32_t bps_add(bps_t *bps, const char *file, int line, const char **err)
   bps->data = nbps;
   bps->len = nlen;
   return id;
-}
-
-void bps_free(bps_t *bps)
-{
-  if (bps == NULL)
-    return;
-  if (bps->data != NULL) {
-    for (size_t i = 0; i < bps->len; ++i)
-      free(bps->data[i].file);
-    free(bps->data);
-  }
-  *bps = BPS_INIT;
 }
 
 // vim: sw=2 sts=2 et

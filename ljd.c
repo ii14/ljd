@@ -67,6 +67,7 @@ static bool locals_push(locals_t *locals, const char *name)
 {
   if (locals == NULL || name == NULL)
     return true;
+
   const size_t len = strlen(name);
   const size_t rsize = locals->len + len + 1;
   if (rsize > locals->cap) {
@@ -77,6 +78,7 @@ static bool locals_push(locals_t *locals, const char *name)
     locals->data = ndata;
     locals->cap = ncap;
   }
+
   memcpy(locals->data + locals->len, name, len);
   locals->len += len;
   locals->data[locals->len++] = '\0';
@@ -127,6 +129,7 @@ static int getlevel(lua_State *L)
   return level;
 }
 
+
 /// coroutine status
 typedef enum {
   CORO_DEAD = 0,
@@ -152,12 +155,6 @@ static coro_status_t coro_status(lua_State *L)
   } else {
     return CORO_DEAD;
   }
-}
-
-/// can resume from coroutine
-static bool canresume(lua_State *L)
-{
-  return coro_status(L) != CORO_DEAD;
 }
 
 
@@ -188,100 +185,100 @@ static void hook(lua_State *L, lua_Debug *ar)
   // save current line
   ljd->currentline = ar->currentline;
 
+  bool got_src = false;
+
   // handle breakpoints only when continuing (this is wrong)
   if (ljd->continuing) { // TODO: move to a separate hook function
     if (ljd->bps.len == 0 || !CAN_YIELD(L))
       return;
-    bool gotinfo = false;
+
     for (size_t i = 0; i < ljd->bps.len; ++i) {
       bp_t *bp = &ljd->bps.data[i];
-      // check line first, since it's cheap
+      // check line first, since it's cheaper
       if (ar->currentline < 1 || ar->currentline != bp->line)
         return;
 
-      // get source info if necessary, once
-      if (!gotinfo) {
+      // get source info, once
+      if (!got_src) {
         if (!lua_getinfo(L, "S", ar))
           return;
-        gotinfo = true;
+        got_src = true;
       }
 
       // skip if we don't know the file
       if (ar->source == NULL || *(ar->source) != '@')
         continue;
-
       // compare source files after the '@'
-      if (strcmp(bp->file, ar->source + 1) == 0) {
-        if (ar->currentline != ljd->skipline) {
-          ljd->skipline = ar->currentline;
-          ljd->currentbp = bp->id;
-          size_t len = strlen(ar->source);
-          char *source = malloc(len + 1);
-          if (source != NULL) {
-            assert(ljd->currentsrc == NULL);
-            memcpy(source, ar->source, len + 1);
-            ljd->currentsrc = source;
-          }
+      if (strcmp(bp->file, ar->source + 1) != 0)
+        continue;
 
-          locals_clear(&ljd->locals);
-          for (int i = 1;; ++i) {
-            const char *name = lua_getlocal(L, ar, i);
-            if (name == NULL)
-              break;
-            locals_push(&ljd->locals, name);
-            lua_pop(L, 1);
-          }
-          lua_yield(L, 0);
-          return;
-        } else {
-          ljd->skipline = -1;
+      if (ljd->skipline != ar->currentline) {
+        ljd->currentbp = bp->id;
+        ljd->skipline = ar->currentline;
+        size_t len = strlen(ar->source);
+        char *src = malloc(len + 1);
+        if (src != NULL) {
+          assert(ljd->currentsrc == NULL);
+          memcpy(src, ar->source, len + 1);
+          ljd->currentsrc = src;
         }
+        goto yield;
+      } else {
+        ljd->skipline = -1;
       }
     }
   }
 
   // skip function (next or finish)
-  // TODO: change hook to LUA_HOOKRET
   if (ljd->skiplevel != -1 && getlevel(L) > ljd->skiplevel)
     return;
 
-  if (ar->currentline != ljd->skipline) {
+  if (ljd->skipline != ar->currentline) {
     // hook is called before the line is executed,
     // so to not fall into a loop, save the line
     // number and skip it next time
     // TODO: save source, because it could be a different file
-    ljd->skipline = ar->currentline;
     ljd->currentbp = 0;
+    ljd->skipline = ar->currentline;
     if (lua_getinfo(L, "S", ar) && ar->source != NULL) {
       // TODO: ignore if doesn't start with '@'?
       size_t len = strlen(ar->source);
-      char *source = malloc(len + 1);
-      if (source != NULL) {
+      char *src = malloc(len + 1);
+      if (src != NULL) {
         assert(ljd->currentsrc == NULL);
-        memcpy(source, ar->source, len + 1);
-        ljd->currentsrc = source;
+        memcpy(src, ar->source, len + 1);
+        ljd->currentsrc = src;
       }
     }
-
-    if (CAN_YIELD(L)) {
-      locals_clear(&ljd->locals);
-      for (int i = 1;; ++i) {
-        const char *name = lua_getlocal(L, ar, i);
-        if (name == NULL)
-          break;
-        locals_push(&ljd->locals, name);
-        lua_pop(L, 1);
-      }
-      lua_yield(L, 0);
-      return;
-    }
+    goto yield;
   } else {
     ljd->skipline = -1;
   }
+
+  return;
+
+yield:
+  if (!CAN_YIELD(L))
+    return;
+
+  // save locals
+  locals_clear(&ljd->locals);
+  for (int i = 1;; ++i) {
+    const char *name = lua_getlocal(L, ar, i);
+    if (name == NULL)
+      break;
+    locals_push(&ljd->locals, name);
+    lua_pop(L, 1);
+  }
+
+  lua_yield(L, 0);
 }
 
 
-static inline bool action_enter(lua_State *L, ljd_t **ljd, lua_State **coro)
+static inline bool action_enter(
+    lua_State *L,
+    ljd_t **ljd,
+    lua_State **coro)
 {
   *ljd = luaL_checkudata(L, 1, LJD_DEBUGGER);
   lua_rawgeti(L, LUA_REGISTRYINDEX, (*ljd)->coro);
@@ -292,7 +289,7 @@ static inline bool action_enter(lua_State *L, ljd_t **ljd, lua_State **coro)
     return false;
   }
 
-  if (!canresume(*coro)) {
+  if (coro_status(*coro) == CORO_DEAD) {
     luaL_error(L, "cannot resume dead coroutine");
     return false;
   }
@@ -313,8 +310,16 @@ static inline bool action_enter(lua_State *L, ljd_t **ljd, lua_State **coro)
   return true;
 }
 
-static inline int action_return(lua_State *L, ljd_t *ljd, lua_State *coro, int status)
+static inline int action_return(
+    lua_State *L,
+    ljd_t *ljd,
+    lua_State *coro,
+    int status,
+    int n)
 {
+  if (n < 0)
+    n = 0;
+
   ljd->skiplevel = -1;
   ljd->continuing = false;
 
@@ -322,26 +327,15 @@ static inline int action_return(lua_State *L, ljd_t *ljd, lua_State *coro, int s
   lua_pushnil(L);
   lua_setfield(L, LUA_REGISTRYINDEX, LJD_RUNNING);
 
-  if (status == LUA_OK) { // coroutine returned
-    lua_pushboolean(L, 1);
-    return 1;
+  if (status == LUA_OK) {
+    lua_pushboolean(L, true);
   } else if (status == LUA_YIELD) {
     lua_pushnumber(L, ljd->currentbp);
-    if (ljd->currentline < 0)
-      return 1;
-    lua_pushnumber(L, ljd->currentline);
-    if (ljd->currentsrc == NULL)
-      return 2;
-    lua_pushstring(L, ljd->currentsrc);
-    return 3;
-  } else if (status == LUA_ERRRUN) {
-    lua_pushboolean(L, 0);
-    lua_xmove(coro, L, 1); // move error message
-    return 2;
+  } else {
+    lua_pushboolean(L, false);
   }
-
-  // TODO: handle other statuses
-  return luaL_error(L, "unknown resume status");
+  lua_xmove(coro, L, n); // move returned values
+  return n + 1;
 }
 
 /// ljd.step
@@ -352,11 +346,12 @@ static int ljd_step(lua_State *L)
   if (!action_enter(L, &ljd, &coro))
     return 0;
 
+  int n = lua_gettop(coro);
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
   int status = lua_resume(coro, 0);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
-
-  return action_return(L, ljd, coro, status);
+  n = lua_gettop(coro) - n;
+  return action_return(L, ljd, coro, status, n);
 }
 
 /// ljd.next
@@ -369,11 +364,12 @@ static int ljd_next(lua_State *L)
 
   ljd->skiplevel = getlevel(coro);
 
+  int n = lua_gettop(coro);
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
   int status = lua_resume(coro, 0);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
-
-  return action_return(L, ljd, coro, status);
+  n = lua_gettop(coro) - n;
+  return action_return(L, ljd, coro, status, n);
 }
 
 /// ljd.finish
@@ -388,11 +384,12 @@ static int ljd_finish(lua_State *L)
   if (ljd->skiplevel < 0)
     ljd->skiplevel = 0;
 
+  int n = lua_gettop(coro);
   lua_sethook(coro, hook, LUA_MASKLINE, 0);
   int status = lua_resume(coro, 0);
   lua_sethook(coro, NULL, 0, 0); // TODO: restore previous hook
-
-  return action_return(L, ljd, coro, status);
+  n = lua_gettop(coro) - n;
+  return action_return(L, ljd, coro, status, n);
 }
 
 /// ljd.continue
@@ -406,6 +403,7 @@ static int ljd_continue(lua_State *L)
   ljd->continuing = true;
 
   int status;
+  int n = lua_gettop(coro);
   if (ljd->bps.len > 0) { // set hook if there are any breakpoints set
     lua_sethook(coro, hook, LUA_MASKLINE, 0);
     status = lua_resume(coro, 0);
@@ -413,8 +411,8 @@ static int ljd_continue(lua_State *L)
   } else {
     status = lua_resume(coro, 0);
   }
-
-  return action_return(L, ljd, coro, status);
+  n = lua_gettop(coro) - n;
+  return action_return(L, ljd, coro, status, n);
 }
 
 
