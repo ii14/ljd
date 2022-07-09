@@ -13,6 +13,15 @@ local function L(f)
   return line
 end
 
+local function filter_locals(t)
+  for k, v in pairs(t) do
+    if v == '(*temporary)' then
+      t[k] = nil
+    end
+  end
+  return t
+end
+
 describe('ljd', function()
   describe('step()', function()
     it('can step through function', function()
@@ -169,6 +178,43 @@ describe('ljd', function()
       eq({ true, 1, 2 }, { D:step() })
       eq(-1, D.currentline)
     end)
+
+    it('steps out of just one function', function()
+      local function f3()
+        local y = 0
+        y = y + 1
+        return y
+      end
+
+      local function f2()
+        local x = f3()
+        return x
+      end
+
+      local function f()
+        local a = f2()
+        local b = 2
+        return a, b
+      end
+
+      local D = ljd.new(f)
+
+      eq(-1, D.currentline)
+      eq({ 0 }, { D:step() })
+      eq(L(f) + 1, D.currentline)
+      eq({ 0 }, { D:step() })
+      eq(L(f2) + 1, D.currentline)
+      eq({ 0 }, { D:step() })
+      eq(L(f3) + 1, D.currentline)
+      eq({ 0 }, { D:finish() })
+      eq(L(f2) + 2, D.currentline)
+      eq({ 0 }, { D:step() })
+      eq(L(f) + 2, D.currentline)
+      eq({ 0 }, { D:step() })
+      eq(L(f) + 3, D.currentline)
+      eq({ true, 1, 2 }, { D:step() })
+      eq(-1, D.currentline)
+    end)
   end)
 
   describe('continue()', function()
@@ -211,6 +257,26 @@ describe('ljd', function()
     end
 
     local D = ljd.new(f, 1, 2)
+
     eq({ true, 2, 4 }, { D:continue() })
+  end)
+
+  it('can inspect local variables', function()
+    local function f()
+      local a = 1
+      local b = 2
+      return a, b
+    end
+
+    local D = ljd.new(f)
+
+    eq({ 0 }, { D:step() })
+    eq({}, filter_locals(D:locals(0)))
+    eq({ 0 }, { D:step() })
+    eq({ 'a' }, filter_locals(D:locals(0)))
+    eq({ 0 }, { D:step() })
+    eq({ 'a', 'b' }, filter_locals(D:locals(0)))
+    eq({ true, 1, 2 }, { D:step() })
+    eq(-1, D.currentline)
   end)
 end)
