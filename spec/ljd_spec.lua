@@ -341,4 +341,6 @@ describe('ljd', function()
       eq(-1, D.currentline)
     end)
   end)
+
+  -- TODO: test breakpoints
 end)

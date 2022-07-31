@@ -27,9 +27,6 @@ luajit: luajit/src/luajit
 test: $(TARGET) luajit/src/luajit
 	busted --lua=./luajit/src/luajit
 
-# test: $(TARGET) luajit/src/luajit
-# 	./luajit/src/luajit test.lua
-
 compile_commands.json: Makefile
 	compiledb -n make
 
